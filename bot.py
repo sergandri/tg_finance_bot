@@ -1,16 +1,16 @@
-# bot.py
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from config import BOT_API_TOKEN
+from config import API_TOKEN
 from handlers.currency_conversion import router
 from database.database import init_db
+
 
 async def main():
     logging.info("Бот запускается...")
 
-    bot = Bot(token=BOT_API_TOKEN)
+    bot = Bot(token=API_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
     dp.include_router(router)

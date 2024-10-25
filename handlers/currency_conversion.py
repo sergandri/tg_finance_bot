@@ -1,11 +1,12 @@
-# handlers/currency_conversion.py
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from states.states import CurrencyConversionStates
-from keyboards.keyboards import main_menu_kb, currency_kb, period_kb
-from services.currency_service import convert_currency, convert_currency_from_openapi
-from database.database import save_conversion, get_previous_requests
+from keyboards.keyboards import main_menu_kb, currency_kb, period_kb, crypto_kb, currency_pairs_kb
+from services.currency_service import get_exchange_rate, get_exchange_rate_history
+from services.crypto_service import get_crypto_price, get_crypto_price_history
+from database.database import save_user
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,16 +15,17 @@ router = Router()
 
 @router.message(Command("start"))
 async def command_start_handler(message: types.Message, state: FSMContext):
+    await save_user(message.from_user.id, message.from_user.username)
     await message.answer(
-        "Привет! Я помогу тебе с валютными операциями. Чтобы начать, выбери действие:",
+        "Привет! Я помогу тебе с получением курсов валют и криптовалют. Чтобы начать, выбери действие:",
         reply_markup=main_menu_kb()
     )
     await state.set_state(CurrencyConversionStates.main_menu)
 
-@router.message(F.text == "Конвертировать валюту")
-async def button_convert_handler(message: types.Message, state: FSMContext):
+@router.message(F.text == "Курс валют")
+async def button_exchange_rate_handler(message: types.Message, state: FSMContext):
     await message.answer(
-        "Пожалуйста, выберите валюту, которую вы хотите конвертировать:",
+        "Пожалуйста, выберите валюту, из которой вы хотите узнать курс:",
         reply_markup=currency_kb()
     )
     await state.set_state(CurrencyConversionStates.waiting_for_currency_from)
@@ -31,15 +33,13 @@ async def button_convert_handler(message: types.Message, state: FSMContext):
 @router.message(CurrencyConversionStates.waiting_for_currency_from, F.text != "Назад")
 async def currency_from_choice_handler(message: types.Message, state: FSMContext):
     selected_currency_from = message.text.strip().upper()
-    valid_currencies = [btn.text for row in currency_kb().keyboard for btn in row]
-
+    valid_currencies = [btn.text for row in currency_kb().keyboard for btn in row if btn.text != "Назад"]
     if selected_currency_from not in valid_currencies:
-        await message.answer("Пожалуйста, выберите корректную валюту для конвертации.")
+        await message.answer("Пожалуйста, выберите корректную валюту.")
         return
-
     await state.update_data(currency_from=selected_currency_from)
     await message.answer(
-        f"Вы выбрали {selected_currency_from}. Теперь выберите валюту, в которую вы хотите конвертировать:",
+        f"Вы выбрали {selected_currency_from}. Теперь выберите валюту, к которой вы хотите узнать курс:",
         reply_markup=currency_kb()
     )
     await state.set_state(CurrencyConversionStates.waiting_for_currency_to)
@@ -47,86 +47,133 @@ async def currency_from_choice_handler(message: types.Message, state: FSMContext
 @router.message(CurrencyConversionStates.waiting_for_currency_to, F.text != "Назад")
 async def currency_to_choice_handler(message: types.Message, state: FSMContext):
     selected_currency_to = message.text.strip().upper()
-    valid_currencies = [btn.text for row in currency_kb().keyboard for btn in row]
-
+    valid_currencies = [btn.text for row in currency_kb().keyboard for btn in row if btn.text != "Назад"]
     if selected_currency_to not in valid_currencies:
-        await message.answer("Пожалуйста, выберите корректную валюту для конвертации.")
+        await message.answer("Пожалуйста, выберите корректную валюту.")
         return
-
-    data = await state.get_data()
-    if selected_currency_to == data.get('currency_from'):
-        await message.answer("Валюта конвертации не может совпадать с исходной валютой.")
-        return
-
-    await state.update_data(currency_to=selected_currency_to)
-    await message.answer(f"Вы выбрали {selected_currency_to}. Введите сумму для конвертации:")
-    await state.set_state(CurrencyConversionStates.waiting_for_amount)
-
-@router.message(CurrencyConversionStates.waiting_for_amount)
-async def amount_input_handler(message: types.Message, state: FSMContext):
-    input_text = message.text.strip().replace(',', '.')
-    if not input_text.replace('.', '', 1).isdigit():
-        await message.answer("Пожалуйста, введите корректное число для конвертации.")
-        return
-
-    amount = float(input_text)
     data = await state.get_data()
     currency_from = data.get('currency_from')
-    currency_to = data.get('currency_to')
-
+    if selected_currency_to == currency_from:
+        await message.answer("Валюты не должны совпадать. Пожалуйста, выберите другую валюту.")
+        return
     try:
-        result_yahoo_finance = await convert_currency(amount, currency_from, currency_to)
-        result_free_api = await convert_currency_from_openapi(amount, currency_from, currency_to)
-
-        user_id = message.from_user.id
-        await save_conversion(user_id, currency_from, currency_to, amount, result_yahoo_finance, result_free_api)
-
-        await message.answer(
-            f"Результаты конвертации:\n"
-            f"Yahoo Finance: {amount} {currency_from} = {result_yahoo_finance} {currency_to}\n"
-            f"Open API: {amount} {currency_from} = {result_free_api} {currency_to}"
-        )
+        rate = await get_exchange_rate(currency_from, selected_currency_to)
+        rate_str = f"{rate:.6f}"
+        await message.answer(f"Текущий курс {currency_from}/{selected_currency_to}: {rate_str}")
     except Exception as e:
-        logger.error(f"Ошибка при конвертации: {e}")
-        await message.answer("Произошла ошибка при конвертации валюты. Пожалуйста, попробуйте позже.")
+        logger.error(f"Ошибка при получении курса: {e}")
+        await message.answer("Произошла ошибка при получении курса. Пожалуйста, попробуйте позже.")
     finally:
         await state.clear()
         await command_start_handler(message, state)
 
-@router.message(F.text == "История конвертаций")
-async def history_button_handler(message: types.Message, state: FSMContext):
-    await message.answer("Выберите период для просмотра истории конвертаций:", reply_markup=period_kb())
-    await state.set_state(CurrencyConversionStates.waiting_for_history_period)
+@router.message(F.text == "Курс криптовалют")
+async def crypto_price_start(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Пожалуйста, выберите криптовалюту для получения текущего курса:",
+        reply_markup=crypto_kb()
+    )
+    await state.set_state(CurrencyConversionStates.waiting_for_crypto_choice)
 
-@router.message(CurrencyConversionStates.waiting_for_history_period, F.text != "Назад")
-async def history_period_choice_handler(message: types.Message, state: FSMContext):
-    period = message.text.strip()
-    days_mapping = {
-        "1 день": "-1 day",
-        "1 неделя": "-7 days",
-        "1 месяц": "-30 days"
+@router.message(CurrencyConversionStates.waiting_for_crypto_choice, F.text != "Назад")
+async def crypto_choice_handler(message: types.Message, state: FSMContext):
+    selected_crypto = message.text.strip().lower()
+    valid_cryptos = [btn.text.lower() for row in crypto_kb().keyboard for btn in row if btn.text != "Назад"]
+    if selected_crypto not in valid_cryptos:
+        await message.answer("Пожалуйста, выберите корректную криптовалюту.")
+        return
+    crypto_ids = {
+        'bitcoin': 'bitcoin',
+        'ethereum': 'ethereum',
+        'litecoin': 'litecoin',
+        'ripple': 'ripple',
+        'dogecoin': 'dogecoin'
     }
+    crypto_id = crypto_ids.get(selected_crypto)
+    try:
+        price = await get_crypto_price(crypto_id)
+        price_str = f"{price:.2f}"
+        await message.answer(f"Текущая цена {selected_crypto.capitalize()}: {price_str} USD")
+    except Exception as e:
+        logger.error(f"Ошибка при получении курса криптовалюты: {e}")
+        await message.answer("Произошла ошибка при получении курса криптовалюты. Пожалуйста, попробуйте позже.")
+    finally:
+        await state.clear()
+        await command_start_handler(message, state)
 
-    if period not in days_mapping:
+@router.message(F.text == "Динамика курса")
+async def rate_dynamics_start(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Пожалуйста, выберите тип курса:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="Валюта"), KeyboardButton(text="Криптовалюта")],
+                [KeyboardButton(text="Назад")]
+            ],
+            resize_keyboard=True
+        )
+    )
+    await state.set_state(CurrencyConversionStates.waiting_for_rate_type)
+
+@router.message(CurrencyConversionStates.waiting_for_rate_type)
+async def rate_type_choice_handler(message: types.Message, state: FSMContext):
+    selected_type = message.text.strip().lower()
+    if selected_type == "валюта":
+        await message.answer(
+            "Пожалуйста, выберите валютную пару:",
+            reply_markup=currency_pairs_kb()
+        )
+        await state.set_state(CurrencyConversionStates.waiting_for_currency_pair)
+    elif selected_type == "криптовалюта":
+        await message.answer(
+            "Пожалуйста, выберите криптовалюту:",
+            reply_markup=crypto_kb()
+        )
+        await state.set_state(CurrencyConversionStates.waiting_for_rate_crypto_choice)
+    elif selected_type == "Назад":
+        await back_handler(message, state)
+    else:
+        await message.answer("Пожалуйста, выберите 'Валюта' или 'Криптовалюта'.")
+
+@router.message(CurrencyConversionStates.waiting_for_currency_pair, F.text != "Назад")
+async def currency_pair_handler(message: types.Message, state: FSMContext):
+    selected_pair = message.text.strip().upper()
+    valid_pairs = [btn.text for row in currency_pairs_kb().keyboard for btn in row if btn.text != "Назад"]
+    if selected_pair not in valid_pairs:
+        await message.answer("Пожалуйста, выберите корректную валютную пару.")
+        return
+    await state.update_data(currency_pair=selected_pair)
+    await message.answer(
+        "Выберите период для получения динамики курса:",
+        reply_markup=period_kb()
+    )
+    await state.set_state(CurrencyConversionStates.waiting_for_rate_period)
+
+@router.message(CurrencyConversionStates.waiting_for_rate_period, F.text != "Назад")
+async def rate_period_choice_handler(message: types.Message, state: FSMContext):
+    period = message.text.strip()
+    valid_periods = ["1 день", "5 дней", "1 месяц"]
+
+    if period not in valid_periods:
         await message.answer("Пожалуйста, выберите корректный период.")
         return
 
-    user_id = message.from_user.id
-    conversions = await get_previous_requests(user_id, days_mapping[period])
+    data = await state.get_data()
+    currency_pair = data.get('currency_pair')
+    currency_from, currency_to = currency_pair.split('/')
 
-    if conversions:
-        history_message = "\n\n".join(
-            [f"{row['created_at']}: {row['amount']} {row['currency_from']} = {row['result_yahoo']} {row['currency_to']} (Yahoo Finance)\n"
-             f"{row['amount']} {row['currency_from']} = {row['result_openapi']} {row['currency_to']} (Open API)" for row in conversions]
-        )
-        await message.answer(f"История конвертаций за {period}:\n{history_message}")
-    else:
-        await message.answer(f"У вас нет конвертаций за {period}.")
+    try:
+        rate_history = await get_exchange_rate_history(currency_from, currency_to, period)
+        history_message = f"Динамика курса {currency_pair} за {period}:\n\n{rate_history}"
+        await message.answer(history_message)
+    except Exception as e:
+        logger.error(f"Ошибка при получении динамики курса: {e}")
+        await message.answer("Произошла ошибка при получении динамики курса. Пожалуйста, попробуйте позже.")
+    finally:
+        await state.clear()
+        await command_start_handler(message, state)
 
-    await state.clear()
-    await command_start_handler(message, state)
 
-# Обработчик для кнопки "Назад"
 @router.message(F.text == "Назад")
 async def back_handler(message: types.Message, state: FSMContext):
     await state.clear()

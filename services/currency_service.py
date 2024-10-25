@@ -1,12 +1,11 @@
-# services/currency_service.py
 import yfinance as yf
 import logging
-import aiohttp
-from config import CURRENCY_TOKEN
+from datetime import datetime
+from typing import List
 
 logger = logging.getLogger(__name__)
 
-async def convert_currency(amount, currency_from, currency_to):
+async def get_exchange_rate(currency_from: str, currency_to: str) -> float:
     ticker = f"{currency_from}{currency_to}=X"
     data = yf.download(tickers=ticker, period='1d', interval='1d')
     if data.empty or 'Close' not in data.columns:
@@ -14,34 +13,29 @@ async def convert_currency(amount, currency_from, currency_to):
         raise ValueError("Не удалось получить курс обмена.")
     try:
         rate = data['Close'].iloc[0]
-    except IndexError:
-        logger.error(f"Нет данных 'Close' для {ticker}")
+        rate = float(rate)
+    except (IndexError, ValueError) as e:
+        logger.error(f"Ошибка при получении курса: {e}")
         raise ValueError("Нет данных для расчета курса.")
-    return round(amount * rate, 2)
+    return round(rate, 6)
 
-async def convert_currency_from_openapi(amount, currency_from, currency_to):
-    url = 'https://api.freecurrencyapi.com/v1/latest'
-    params = {
-        'apikey': CURRENCY_TOKEN,
-        'base_currency': currency_from,
-        'currencies': currency_to
+async def get_exchange_rate_history(currency_from: str, currency_to: str, period: str) -> str:
+    period_mapping = {
+        "1 день": "1d",
+        "5 дней": "5d",
+        "1 месяц": "1mo"
     }
-
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, params=params) as response:
-                if response.status != 200:
-                    logger.error(f"Ошибка при запросе к FreeCurrencyAPI: {response.status}")
-                    raise ValueError("Не удалось получить курс обмена.")
-                data = await response.json()
-                # Проверяем наличие необходимых данных
-                if 'data' in data and currency_to in data['data']:
-                    rate = data['data'][currency_to]
-                    result = round(amount * rate, 2)
-                    return result
-                else:
-                    logger.error("Некорректный ответ от FreeCurrencyAPI")
-                    raise ValueError("Не удалось получить курс обмена.")
-        except Exception as e:
-            logger.exception(f"Ошибка при обращении к FreeCurrencyAPI: {e}")
-            raise ValueError("Произошла ошибка при конвертации валюты.")
+    yf_period = period_mapping.get(period)
+    if not yf_period:
+        raise ValueError("Некорректный период.")
+    ticker = f"{currency_from}{currency_to}=X"
+    data = yf.download(tickers=ticker, period=yf_period, interval='1d')
+    if data.empty or 'Close' not in data.columns:
+        logger.error(f"Не удалось получить исторические данные для {ticker}")
+        raise ValueError("Не удалось получить исторические данные курса.")
+    history = []
+    for date, row in data.iterrows():
+        date_str = date.strftime('%Y-%m-%d')
+        close_price = float(row['Close'])
+        history.append(f"{date_str}: {close_price:.6f}")
+    return "\n".join(history)
