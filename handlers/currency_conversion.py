@@ -6,7 +6,7 @@ from states.states import CurrencyConversionStates
 from keyboards.keyboards import main_menu_kb, currency_kb, period_kb, crypto_kb, currency_pairs_kb
 from services.currency_service import get_exchange_rate, get_exchange_rate_history
 from services.crypto_service import get_crypto_price, get_crypto_price_history
-from database.database import save_user
+from database.database import save_user, save_user_history
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,10 @@ async def currency_to_choice_handler(message: types.Message, state: FSMContext):
         rate = await get_exchange_rate(currency_from, selected_currency_to)
         rate_str = f"{rate:.6f}"
         await message.answer(f"Текущий курс {currency_from}/{selected_currency_to}: {rate_str}")
+
+        ticker = f"{currency_from}/{selected_currency_to}"
+        await save_user_history(message.from_user.id, 'currency', ticker)
+
     except Exception as e:
         logger.error(f"Ошибка при получении курса: {e}")
         await message.answer("Произошла ошибка при получении курса. Пожалуйста, попробуйте позже.")
@@ -94,6 +98,7 @@ async def crypto_choice_handler(message: types.Message, state: FSMContext):
         price = await get_crypto_price(crypto_id)
         price_str = f"{price:.2f}"
         await message.answer(f"Текущая цена {selected_crypto.capitalize()}: {price_str} USD")
+        await save_user_history(message.from_user.id, 'crypto', selected_crypto.capitalize())
     except Exception as e:
         logger.error(f"Ошибка при получении курса криптовалюты: {e}")
         await message.answer("Произошла ошибка при получении курса криптовалюты. Пожалуйста, попробуйте позже.")
@@ -149,26 +154,48 @@ async def currency_pair_handler(message: types.Message, state: FSMContext):
     )
     await state.set_state(CurrencyConversionStates.waiting_for_rate_period)
 
-@router.message(CurrencyConversionStates.waiting_for_rate_period, F.text != "Назад")
-async def rate_period_choice_handler(message: types.Message, state: FSMContext):
+@router.message(CurrencyConversionStates.waiting_for_rate_crypto_choice, F.text != "Назад")
+async def rate_crypto_choice_handler(message: types.Message, state: FSMContext):
+    selected_crypto = message.text.strip().lower()
+    valid_cryptos = [btn.text.lower() for row in crypto_kb().keyboard for btn in row if btn.text != "Назад"]
+    if selected_crypto not in valid_cryptos:
+        await message.answer("Пожалуйста, выберите корректную криптовалюту.")
+        return
+    crypto_ids = {
+        'bitcoin': 'bitcoin',
+        'ethereum': 'ethereum',
+        'litecoin': 'litecoin',
+        'ripple': 'ripple',
+        'dogecoin': 'dogecoin'
+    }
+    crypto_id = crypto_ids.get(selected_crypto)
+    await state.update_data(crypto_id=crypto_id, selected_crypto=selected_crypto.capitalize())
+    await message.answer(
+        "Пожалуйста, выберите период для получения динамики курса:",
+        reply_markup=period_kb()
+    )
+    await state.set_state(CurrencyConversionStates.waiting_for_rate_period_crypto)
+
+
+@router.message(CurrencyConversionStates.waiting_for_rate_period_crypto, F.text != "Назад")
+async def rate_crypto_period_choice_handler(message: types.Message, state: FSMContext):
     period = message.text.strip()
     valid_periods = ["1 день", "5 дней", "1 месяц"]
-
     if period not in valid_periods:
         await message.answer("Пожалуйста, выберите корректный период.")
         return
-
     data = await state.get_data()
-    currency_pair = data.get('currency_pair')
-    currency_from, currency_to = currency_pair.split('/')
-
+    crypto_id = data.get('crypto_id')
+    selected_crypto = data.get('selected_crypto')
     try:
-        rate_history = await get_exchange_rate_history(currency_from, currency_to, period)
-        history_message = f"Динамика курса {currency_pair} за {period}:\n\n{rate_history}"
+        rate_history = await get_crypto_price_history(crypto_id, period)
+        history_message = f"Динамика курса {selected_crypto} за {period}:\n\n{rate_history}"
         await message.answer(history_message)
+
+        await save_user_history(message.from_user.id, 'crypto', selected_crypto)
     except Exception as e:
-        logger.error(f"Ошибка при получении динамики курса: {e}")
-        await message.answer("Произошла ошибка при получении динамики курса. Пожалуйста, попробуйте позже.")
+        logger.error(f"Ошибка при получении динамики курса криптовалюты: {e}")
+        await message.answer("Произошла ошибка при получении динамики курса криптовалюты. Пожалуйста, попробуйте позже.")
     finally:
         await state.clear()
         await command_start_handler(message, state)

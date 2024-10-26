@@ -5,19 +5,29 @@ from typing import List
 
 logger = logging.getLogger(__name__)
 
+
 async def get_exchange_rate(currency_from: str, currency_to: str) -> float:
+    invert_rate = False
     ticker = f"{currency_from}{currency_to}=X"
     data = yf.download(tickers=ticker, period='1d', interval='1d')
     if data.empty or 'Close' not in data.columns:
-        logger.error(f"Не удалось получить курс для {ticker}")
-        raise ValueError("Не удалось получить курс обмена.")
+        # Попробуем обратную пару
+        ticker = f"{currency_to}{currency_from}=X"
+        data = yf.download(tickers=ticker, period='1d', interval='1d')
+        if data.empty or 'Close' not in data.columns:
+            logger.error(f"Не удалось получить курс для {currency_from}/{currency_to}")
+            raise ValueError("Не удалось получить курс обмена.")
+        invert_rate = True
     try:
         rate = data['Close'].iloc[0]
         rate = float(rate)
+        if invert_rate:
+            rate = 1 / rate
     except (IndexError, ValueError) as e:
         logger.error(f"Ошибка при получении курса: {e}")
         raise ValueError("Нет данных для расчета курса.")
     return round(rate, 6)
+
 
 async def get_exchange_rate_history(currency_from: str, currency_to: str, period: str) -> str:
     period_mapping = {
