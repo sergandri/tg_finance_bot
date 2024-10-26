@@ -1,10 +1,11 @@
 import aiohttp
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 BASE_URL = 'https://api.coingecko.com/api/v3'
+
 
 async def get_crypto_price(crypto_id, vs_currency='usd'):
     url = f'{BASE_URL}/simple/price'
@@ -15,19 +16,23 @@ async def get_crypto_price(crypto_id, vs_currency='usd'):
     async with aiohttp.ClientSession() as session:
         try:
             async with session.get(url, params=params) as response:
+                logger.debug(f"Запрос к {url} с параметрами {params}, статус ответа {response.status}")
                 if response.status != 200:
                     logger.error(f"Ошибка при запросе к CoinGecko API: {response.status}")
+                    await response.read()  # Читаем содержимое ответа для предотвращения ResourceWarning
                     raise ValueError("Не удалось получить курс криптовалюты.")
                 data = await response.json()
+                logger.debug(f"Полученные данные: {data}")
                 if crypto_id in data and vs_currency in data[crypto_id]:
-                    price = data[crypto_id][vs_currency]
+                    price = float(data[crypto_id][vs_currency])
                     return price
                 else:
                     logger.error("Некорректный ответ от CoinGecko API")
                     raise ValueError("Не удалось получить курс криптовалюты.")
         except Exception as e:
             logger.exception(f"Ошибка при обращении к CoinGecko API: {e}")
-            raise ValueError("Произошла ошибка при получении курса криптовалюты.")
+            raise ValueError("Произошла ошибка при получении курса криптовалюты.") from e
+
 
 async def get_crypto_price_history(crypto_id, period, vs_currency='usd'):
     period_mapping = {
@@ -55,7 +60,7 @@ async def get_crypto_price_history(crypto_id, period, vs_currency='usd'):
                     history = []
                     for price_entry in data['prices']:
                         timestamp = price_entry[0] / 1000
-                        date_str = datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d')
+                        date_str = datetime.fromtimestamp(timestamp, timezone.utc).strftime('%Y-%m-%d')
                         price = price_entry[1]
                         history.append(f"{date_str}: {price:.2f} USD")
                     return "\n".join(history)
