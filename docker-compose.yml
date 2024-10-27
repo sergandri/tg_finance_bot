@@ -1,6 +1,6 @@
 services:
   app:
-    build: .
+    image: sergandri/tg_finance_bot-app:latest
     ports:
       - "8200:8200"
     volumes:
