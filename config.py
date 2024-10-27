@@ -2,7 +2,8 @@ import os
 import logging
 from dotenv import load_dotenv
 
-load_dotenv()
+#load_dotenv()
+load_dotenv('/app_data/.env')
 
 API_TOKEN = os.getenv('API_TOKEN')
 CURRENCY_API = os.getenv('CURRENCY_API')
