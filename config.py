@@ -6,6 +6,7 @@ load_dotenv()
 
 API_TOKEN = os.getenv('API_TOKEN')
 CURRENCY_API = os.getenv('CURRENCY_API')
+DATABASE_PATH = os.getenv('DATABASE_PATH', '/app_data/database.sqlite')
 
 if not API_TOKEN:
     raise ValueError("No API_TOKEN provided")

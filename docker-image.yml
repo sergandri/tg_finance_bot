@@ -12,19 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check out the repo
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
     - name: Login to Docker
-      uses: docker/login-action@v1
+      uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
     - name: Push to Docker Hub
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v4
       with:
+        context: .
         push: true
-        tags: malyshkoa2/lesson_5
+        tags: sergandri/tg_finance_bot-app:latest
         
   deploy:
       name: Deploy the app
@@ -40,9 +41,5 @@ jobs:
           script: |
             sudo docker stop main_container
             sudo docker system prune -a -f
-            sudo docker pull malyshkoa2/lesson_5
-            sudo nohup docker run -d -it \
-            -e API_TOKEN=${{ secrets.API_TOKEN }} \
-            -v /home/access/app_data:/app/app_data \
-            --name main_container \
-            malyshkoa2/lesson_5
+            sudo docker pull sergandri/tg_finance_bot-app:latest
+            sudo docker run -d -p 8200:8200 --name tg_finance_bot-app -v /app_data:/app_data sergandri/tg_finance_bot-app:latest
