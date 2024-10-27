@@ -1,0 +1,11 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./app_data:/app_data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_PATH=/app_data/database.sqlite
