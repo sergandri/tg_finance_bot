@@ -2,6 +2,7 @@ import aiohttp
 import logging
 from datetime import datetime, timezone
 
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = 'https://api.coingecko.com/api/v3'
