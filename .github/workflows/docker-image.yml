@@ -43,7 +43,7 @@ jobs:
           sudo docker rm tg_finance_bot-app || true
           sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tg_finance_bot-app:latest
           sudo nohup docker run -d \
-            -p 8200:8200 \ 
+            -p 8200:8200 \
             --name tg_finance_bot-app \
             -e API_TOKEN=${{ secrets.API_TOKEN }} \
             -e CURRENCY_API=${{ secrets.CURRENCY_API }} \
