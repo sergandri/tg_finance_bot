@@ -34,7 +34,7 @@ jobs:
         tags: sergandri/tg_finance_bot-app:latest
 
     - name: SSH Deploy to Yandex VM
-      uses: appleboy/ssh-action@v0.1.7
+      uses: appleboy/ssh-action@v0.1.16
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USER }}
