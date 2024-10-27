@@ -47,8 +47,12 @@ jobs:
           DATABASE_PATH=${{ secrets.DATABASE_PATH }}
           EOF
           chmod 600 /app_data/.env
-          docker stop tg_finance_bot-app || true
           docker pull sergandri/tg_finance_bot-app:latest
+          docker stop tg_finance_bot-app || true
           docker rm tg_finance_bot-app || true
-          docker run -d -p 8200:8200 --name tg_finance_bot-app -v /app_data:/app_data sergandri/tg_finance_bot-app:latest
-
+          docker run -d \
+            -p 8200:8200 \  
+            --name tg_finance_bot-app \
+            -v /app_data/.env:/app/.env \  
+            -v /app_data:/app_data \
+            sergandri/tg_finance_bot-app:latest
