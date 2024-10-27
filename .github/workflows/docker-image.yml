@@ -1,5 +1,3 @@
-# .github/workflows/deploy.yml
-
 name: Build and Deploy Docker Image
 
 on:
@@ -26,33 +24,29 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-    - name: Build and Push Docker image
+    - name: Build and Push Docker Image
       uses: docker/build-push-action@v4
       with:
         context: .
         push: true
-        tags: sergandri/tg_finance_bot-app:latest
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/tg_finance_bot-app:latest
 
     - name: SSH Deploy to Yandex VM
-      uses: appleboy/ssh-action@master
+      uses: appleboy/ssh-action@v0.1.16
       with:
         host: ${{ secrets.HOST }}
         username: ${{ secrets.USER }}
         key: ${{ secrets.SSH_KEY }}
         script: |
-          mkdir -p /app_data
-          cat <<EOF > /app_data/.env
-          API_TOKEN=${{ secrets.API_TOKEN }}
-          CURRENCY_API=${{ secrets.CURRENCY_API }}
-          DATABASE_PATH=${{ secrets.DATABASE_PATH }}
-          EOF
-          chmod 600 /app_data/.env
-          docker pull sergandri/tg_finance_bot-app:latest
-          docker stop tg_finance_bot-app || true
-          docker rm tg_finance_bot-app || true
-
-          docker run -d \
-            -p 8000:8000 \  
+          set -e  
+          sudo docker stop tg_finance_bot-app || true
+          sudo docker rm tg_finance_bot-app || true
+          sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tg_finance_bot-app:latest
+          sudo nohup docker run -d \
+            -p 8200:8200 \ 
             --name tg_finance_bot-app \
+            -e API_TOKEN=${{ secrets.API_TOKEN }} \
+            -e CURRENCY_API=${{ secrets.CURRENCY_API }} \
+            -e DATABASE_PATH=${{ secrets.DATABASE_PATH }} \
             -v /app_data:/app_data \
-            sergandri/tg_finance_bot-app:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/tg_finance_bot-app:latest
