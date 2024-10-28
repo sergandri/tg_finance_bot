@@ -2,11 +2,12 @@
 
 import aiosqlite
 import logging
+import os
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = 'database/finance_bot.db'
+DB_PATH = os.getenv('DATABASE_PATH', 'database/finance_bot.db')
 
 async def init_db(db_path=DB_PATH):
     async with aiosqlite.connect(db_path) as db:
