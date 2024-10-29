@@ -19,7 +19,7 @@ async def get_crypto_price(crypto_id, vs_currency='usd'):
             async with session.get(url, params=params) as response:
                 logger.debug(f"Запрос к {url} с параметрами {params}, статус ответа {response.status}")
                 if response.status != 200:
-                    logger.error(f"Ошибка при запросе к CoinGecko API: {response.status}")
+                    logger.error(f"Ошибка при запросе к API: {response.status}")
                     await response.read()  # Читаем содержимое ответа для предотвращения ResourceWarning
                     raise ValueError("Не удалось получить курс криптовалюты.")
                 data = await response.json()
@@ -28,10 +28,10 @@ async def get_crypto_price(crypto_id, vs_currency='usd'):
                     price = float(data[crypto_id][vs_currency])
                     return price
                 else:
-                    logger.error("Некорректный ответ от CoinGecko API")
+                    logger.error("Некорректный ответ от API")
                     raise ValueError("Не удалось получить курс криптовалюты.")
         except Exception as e:
-            logger.exception(f"Ошибка при обращении к CoinGecko API: {e}")
+            logger.exception(f"Ошибка при обращении к API: {e}")
             raise ValueError("Произошла ошибка при получении курса криптовалюты.") from e
 
 
@@ -54,7 +54,7 @@ async def get_crypto_price_history(crypto_id, period, vs_currency='usd'):
         try:
             async with session.get(url, params=params) as response:
                 if response.status != 200:
-                    logger.error(f"Ошибка при запросе к CoinGecko API: {response.status}")
+                    logger.error(f"Ошибка при запросе к API: {response.status}")
                     raise ValueError("Не удалось получить исторические данные криптовалюты.")
                 data = await response.json()
                 if 'prices' in data:
@@ -66,8 +66,8 @@ async def get_crypto_price_history(crypto_id, period, vs_currency='usd'):
                         history.append(f"{date_str}: {price:.2f} USD")
                     return "\n".join(history)
                 else:
-                    logger.error("Некорректный ответ от CoinGecko API")
+                    logger.error("Некорректный ответ от API")
                     raise ValueError("Не удалось получить исторические данные криптовалюты.")
         except Exception as e:
-            logger.exception(f"Ошибка при обращении к CoinGecko API: {e}")
+            logger.exception(f"Ошибка при обращении к API: {e}")
             raise ValueError("Произошла ошибка при получении исторических данных криптовалюты.")
