@@ -1,7 +1,5 @@
 import yfinance as yf
 import logging
-from datetime import datetime
-from typing import List
 
 logger = logging.getLogger(__name__)
 

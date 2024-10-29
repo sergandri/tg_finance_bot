@@ -154,6 +154,31 @@ async def currency_pair_handler(message: types.Message, state: FSMContext):
     )
     await state.set_state(CurrencyConversionStates.waiting_for_rate_period)
 
+
+@router.message(CurrencyConversionStates.waiting_for_rate_period, F.text != "Назад")
+async def rate_period_choice_handler(message: types.Message, state: FSMContext):
+    period = message.text.strip()
+    valid_periods = ["1 день", "5 дней", "1 месяц"]
+    if period not in valid_periods:
+        await message.answer("Пожалуйста, выберите корректный период.")
+        return
+    data = await state.get_data()
+    currency_pair = data.get('currency_pair')
+    currency_from, currency_to = currency_pair.split('/')
+    try:
+        rate_history = await get_exchange_rate_history(currency_from, currency_to, period)
+        history_message = f"Динамика курса {currency_pair} за {period}:\n\n{rate_history}"
+        await message.answer(history_message)
+
+        await save_user_history(message.from_user.id, 'currency', currency_pair)
+    except Exception as e:
+        logger.error(f"Ошибка при получении динамики курса валют: {e}")
+        await message.answer("Произошла ошибка при получении динамики курса валют. Пожалуйста, попробуйте позже.")
+    finally:
+        await state.clear()
+        await command_start_handler(message, state)
+
+
 @router.message(CurrencyConversionStates.waiting_for_rate_crypto_choice, F.text != "Назад")
 async def rate_crypto_choice_handler(message: types.Message, state: FSMContext):
     selected_crypto = message.text.strip().lower()
